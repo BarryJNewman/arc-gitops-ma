@@ -1,0 +1,55 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: authentik-redis
+  namespace: authentik
+  labels:
+    app: authentik
+    component: redis
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: authentik
+      component: redis
+  template:
+    metadata:
+      labels:
+        app: authentik
+        component: redis
+    spec:
+      volumes:
+        - name: redis-data
+          hostPath:
+            path: /var/lib/authentik/redis
+            type: DirectoryOrCreate
+      containers:
+        - name: redis
+          image: redis:7-alpine
+          args: ["--save", "60", "1", "--loglevel", "warning"]
+          ports:
+            - containerPort: 6379
+          volumeMounts:
+            - mountPath: /data
+              name: redis-data
+          resources:
+            requests:
+              cpu: "50m"
+              memory: 64Mi
+            limits:
+              memory: 256Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: authentik-redis
+  namespace: authentik
+spec:
+  selector:
+    app: authentik
+    component: redis
+  ports:
+    - port: 6379
+      targetPort: 6379

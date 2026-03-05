@@ -1,0 +1,70 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: takserver-db
+  namespace: tak-server
+  labels:
+    app: takserver-db
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: takserver-db
+  template:
+    metadata:
+      labels:
+        app: takserver-db
+    spec:
+      imagePullSecrets:
+        - name: acr-pull-secret
+      containers:
+        - name: takserver-db
+          image: arconboardacr.azurecr.io/takserver-db:5.5-RELEASE-45
+          imagePullPolicy: Always
+          env:
+            - name: POSTGRES_HOST_AUTH_METHOD
+              value: "trust"
+          ports:
+            - containerPort: 5432
+          volumeMounts:
+            - name: tak-db-data
+              mountPath: /var/lib/postgresql/data
+              subPath: pgdata
+          resources:
+            requests:
+              cpu: "500m"
+              memory: 1Gi
+            limits:
+              cpu: "2"
+              memory: 4Gi
+          startupProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - postgres
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            failureThreshold: 30
+          livenessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - postgres
+            periodSeconds: 30
+            failureThreshold: 5
+          readinessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - postgres
+            periodSeconds: 10
+      volumes:
+        - name: tak-db-data
+          hostPath:
+            path: /var/lib/tak-server/db
+            type: DirectoryOrCreate

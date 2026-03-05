@@ -1,0 +1,149 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: authentik-server
+  namespace: authentik
+  labels:
+    app: authentik
+    component: server
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: authentik
+      component: server
+  template:
+    metadata:
+      labels:
+        app: authentik
+        component: server
+    spec:
+      volumes:
+        - name: authentik-media
+          hostPath:
+            path: /var/lib/authentik/media
+            type: DirectoryOrCreate
+        - name: authentik-templates
+          hostPath:
+            path: /var/lib/authentik/templates
+            type: DirectoryOrCreate
+      containers:
+        - name: server
+          image: ghcr.io/goauthentik/server:2024.12
+          args: ["server"]
+          env:
+            - name: AUTHENTIK_REDIS__HOST
+              value: "authentik-redis"
+            - name: AUTHENTIK_POSTGRESQL__HOST
+              value: "authentik-postgresql"
+            - name: AUTHENTIK_POSTGRESQL__USER
+              value: "authentik"
+            - name: AUTHENTIK_POSTGRESQL__NAME
+              value: "authentik"
+            - name: AUTHENTIK_POSTGRESQL__PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: authentik-secrets
+                  key: POSTGRES_PASSWORD
+            - name: AUTHENTIK_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: authentik-secrets
+                  key: SECRET_KEY
+          ports:
+            - containerPort: 9000
+              name: http
+            - containerPort: 9443
+              name: https
+          volumeMounts:
+            - mountPath: /media
+              name: authentik-media
+            - mountPath: /templates
+              name: authentik-templates
+          resources:
+            requests:
+              cpu: "250m"
+              memory: 512Mi
+            limits:
+              memory: 1Gi
+          startupProbe:
+            httpGet:
+              path: /-/health/live/
+              port: 9000
+            initialDelaySeconds: 20
+            periodSeconds: 5
+            failureThreshold: 30
+          livenessProbe:
+            httpGet:
+              path: /-/health/live/
+              port: 9000
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /-/health/ready/
+              port: 9000
+            periodSeconds: 10
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: authentik-worker
+  namespace: authentik
+  labels:
+    app: authentik
+    component: worker
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: authentik
+      component: worker
+  template:
+    metadata:
+      labels:
+        app: authentik
+        component: worker
+    spec:
+      volumes:
+        - name: authentik-media
+          hostPath:
+            path: /var/lib/authentik/media
+            type: DirectoryOrCreate
+        - name: authentik-templates
+          hostPath:
+            path: /var/lib/authentik/templates
+            type: DirectoryOrCreate
+      containers:
+        - name: worker
+          image: ghcr.io/goauthentik/server:2024.12
+          args: ["worker"]
+          env:
+            - name: AUTHENTIK_REDIS__HOST
+              value: "authentik-redis"
+            - name: AUTHENTIK_POSTGRESQL__HOST
+              value: "authentik-postgresql"
+            - name: AUTHENTIK_POSTGRESQL__USER
+              value: "authentik"
+            - name: AUTHENTIK_POSTGRESQL__NAME
+              value: "authentik"
+            - name: AUTHENTIK_POSTGRESQL__PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: authentik-secrets
+                  key: POSTGRES_PASSWORD
+            - name: AUTHENTIK_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: authentik-secrets
+                  key: SECRET_KEY
+          volumeMounts:
+            - mountPath: /media
+              name: authentik-media
+            - mountPath: /templates
+              name: authentik-templates
+          resources:
+            requests:
+              cpu: "100m"
+              memory: 256Mi
+            limits:
+              memory: 1Gi

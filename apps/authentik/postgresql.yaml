@@ -1,0 +1,74 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: authentik-postgresql
+  namespace: authentik
+  labels:
+    app: authentik
+    component: postgresql
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: authentik
+      component: postgresql
+  template:
+    metadata:
+      labels:
+        app: authentik
+        component: postgresql
+    spec:
+      volumes:
+        - name: pg-data
+          hostPath:
+            path: /var/lib/authentik/postgresql
+            type: DirectoryOrCreate
+      containers:
+        - name: postgresql
+          image: postgres:16-bookworm
+          env:
+            - name: POSTGRES_USER
+              value: "authentik"
+            - name: POSTGRES_DB
+              value: "authentik"
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: authentik-secrets
+                  key: POSTGRES_PASSWORD
+            - name: PGDATA
+              value: "/var/lib/postgresql/data/pgdata"
+          ports:
+            - containerPort: 5432
+          volumeMounts:
+            - mountPath: /var/lib/postgresql/data
+              name: pg-data
+          resources:
+            requests:
+              cpu: "100m"
+              memory: 256Mi
+            limits:
+              memory: 512Mi
+          livenessProbe:
+            exec:
+              command: ["pg_isready", "-U", "authentik"]
+            periodSeconds: 30
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "authentik"]
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: authentik-postgresql
+  namespace: authentik
+spec:
+  selector:
+    app: authentik
+    component: postgresql
+  ports:
+    - port: 5432
+      targetPort: 5432

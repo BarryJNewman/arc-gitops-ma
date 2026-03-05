@@ -1,0 +1,3 @@
+# Large binary directories
+*.zip
+.DS_Store

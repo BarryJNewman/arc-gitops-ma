@@ -1,0 +1,102 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: takserver
+  namespace: tak-server
+  labels:
+    app: takserver
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: takserver
+  template:
+    metadata:
+      labels:
+        app: takserver
+    spec:
+      imagePullSecrets:
+        - name: acr-pull-secret
+      initContainers:
+        - name: wait-for-db
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - |
+              echo "Waiting for tak-database to be ready..."
+              until nc -z tak-database 5432; do
+                echo "  DB not ready, retrying in 5s..."
+                sleep 5
+              done
+              echo "  DB is ready."
+        - name: schema-upgrade
+          image: arconboardacr.azurecr.io/takserver-db:5.5-RELEASE-45
+          imagePullPolicy: Always
+          command:
+            - bash
+            - -c
+            - |
+              echo "=== Running SchemaManager upgrade ==="
+              cd /opt/tak/db-utils
+              # CoreConfig.example.xml has tak-database as the JDBC host,
+              # which resolves via k8s DNS (wait-for-db already confirmed it's up).
+              java -jar SchemaManager.jar upgrade 2>&1
+              echo "=== SchemaManager complete ==="
+      containers:
+        - name: takserver
+          image: arconboardacr.azurecr.io/takserver:5.5-RELEASE-45
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8089
+              name: tls
+            - containerPort: 8443
+              name: https
+            - containerPort: 8444
+              name: fed-https
+            - containerPort: 8446
+              name: cert-https
+            - containerPort: 8088
+              name: tcp
+            - containerPort: 9000
+              name: fed
+            - containerPort: 9001
+              name: fed2
+          volumeMounts:
+            - name: tak-certs
+              mountPath: /opt/tak/certs/files
+            - name: tak-logs
+              mountPath: /opt/tak/logs
+          resources:
+            requests:
+              cpu: "1"
+              memory: 4Gi
+            limits:
+              cpu: "4"
+              memory: 8Gi
+          startupProbe:
+            tcpSocket:
+              port: 8443
+            initialDelaySeconds: 60
+            periodSeconds: 10
+            failureThreshold: 30
+          livenessProbe:
+            tcpSocket:
+              port: 8443
+            periodSeconds: 30
+            failureThreshold: 5
+          readinessProbe:
+            tcpSocket:
+              port: 8443
+            periodSeconds: 10
+      volumes:
+        - name: tak-certs
+          hostPath:
+            path: /var/lib/tak-server/certs
+            type: DirectoryOrCreate
+        - name: tak-logs
+          hostPath:
+            path: /var/lib/tak-server/logs
+            type: DirectoryOrCreate

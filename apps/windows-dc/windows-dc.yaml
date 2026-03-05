@@ -1,0 +1,381 @@
+---
+# ConfigMap: Autounattend.xml for Windows Server 2025 Core unattended install
+# Installs Server Core (index 1), loads VirtIO drivers, sets admin password,
+# enables RDP, and promotes to domain controller on first boot.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: windows-unattend
+  namespace: windows-dc
+data:
+  Autounattend.xml: |
+    <?xml version="1.0" encoding="utf-8"?>
+    <unattend xmlns="urn:schemas-microsoft-com:unattend">
+
+      <!-- ===== WinPE: load VirtIO drivers and select disk ===== -->
+      <settings pass="windowsPE">
+        <component name="Microsoft-Windows-International-Core-WinPE"
+                   processorArchitecture="amd64"
+                   publicKeyToken="31bf3856ad364e35"
+                   language="neutral" versionScope="nonSxS"
+                   xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+          <SetupUILanguage>
+            <UILanguage>en-US</UILanguage>
+          </SetupUILanguage>
+          <InputLocale>en-US</InputLocale>
+          <SystemLocale>en-US</SystemLocale>
+          <UILanguage>en-US</UILanguage>
+          <UserLocale>en-US</UserLocale>
+        </component>
+
+        <component name="Microsoft-Windows-PnpCustomizationsWinPE"
+                   processorArchitecture="amd64"
+                   publicKeyToken="31bf3856ad364e35"
+                   language="neutral" versionScope="nonSxS"
+                   xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+          <DriverPaths>
+            <PathAndCredentials wcm:action="add" wcm:keyValue="1">
+              <Path>D:\viostor\2k25\amd64</Path>
+            </PathAndCredentials>
+            <PathAndCredentials wcm:action="add" wcm:keyValue="2">
+              <Path>D:\NetKVM\2k25\amd64</Path>
+            </PathAndCredentials>
+            <PathAndCredentials wcm:action="add" wcm:keyValue="3">
+              <Path>E:\viostor\2k25\amd64</Path>
+            </PathAndCredentials>
+            <PathAndCredentials wcm:action="add" wcm:keyValue="4">
+              <Path>E:\NetKVM\2k25\amd64</Path>
+            </PathAndCredentials>
+            <PathAndCredentials wcm:action="add" wcm:keyValue="5">
+              <Path>F:\viostor\2k25\amd64</Path>
+            </PathAndCredentials>
+            <PathAndCredentials wcm:action="add" wcm:keyValue="6">
+              <Path>F:\NetKVM\2k25\amd64</Path>
+            </PathAndCredentials>
+          </DriverPaths>
+        </component>
+
+        <component name="Microsoft-Windows-Setup"
+                   processorArchitecture="amd64"
+                   publicKeyToken="31bf3856ad364e35"
+                   language="neutral" versionScope="nonSxS"
+                   xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+          <ImageInstall>
+            <OSImage>
+              <!-- Index 1 = Server Core (no Desktop Experience) -->
+              <InstallFrom>
+                <MetaData wcm:action="add">
+                  <Key>/IMAGE/INDEX</Key>
+                  <Value>1</Value>
+                </MetaData>
+              </InstallFrom>
+              <InstallTo>
+                <DiskID>0</DiskID>
+                <PartitionID>1</PartitionID>
+              </InstallTo>
+            </OSImage>
+          </ImageInstall>
+          <DiskConfiguration>
+            <Disk wcm:action="add">
+              <DiskID>0</DiskID>
+              <WillWipeDisk>true</WillWipeDisk>
+              <CreatePartitions>
+                <!-- Single primary partition (BIOS/MBR boot) -->
+                <CreatePartition wcm:action="add">
+                  <Order>1</Order>
+                  <Extend>true</Extend>
+                  <Type>Primary</Type>
+                </CreatePartition>
+              </CreatePartitions>
+              <ModifyPartitions>
+                <ModifyPartition wcm:action="add">
+                  <Order>1</Order>
+                  <PartitionID>1</PartitionID>
+                  <Active>true</Active>
+                  <Format>NTFS</Format>
+                  <Label>Windows</Label>
+                </ModifyPartition>
+              </ModifyPartitions>
+            </Disk>
+          </DiskConfiguration>
+          <UserData>
+            <AcceptEula>true</AcceptEula>
+            <ProductKey>
+              <WillShowUI>OnError</WillShowUI>
+            </ProductKey>
+          </UserData>
+        </component>
+      </settings>
+
+      <!-- ===== Specialize: hostname, RDP, firewall ===== -->
+      <settings pass="specialize">
+        <component name="Microsoft-Windows-Shell-Setup"
+                   processorArchitecture="amd64"
+                   publicKeyToken="31bf3856ad364e35"
+                   language="neutral" versionScope="nonSxS"
+                   xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+          <ComputerName>DC01</ComputerName>
+        </component>
+
+        <component name="Microsoft-Windows-TerminalServices-LocalSessionManager"
+                   processorArchitecture="amd64"
+                   publicKeyToken="31bf3856ad364e35"
+                   language="neutral" versionScope="nonSxS"
+                   xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+          <fDenyTSConnections>false</fDenyTSConnections>
+        </component>
+
+        <component name="Networking-MPSSVC-Svc"
+                   processorArchitecture="amd64"
+                   publicKeyToken="31bf3856ad364e35"
+                   language="neutral" versionScope="nonSxS"
+                   xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+          <FirewallGroups>
+            <FirewallGroup wcm:action="add" wcm:keyValue="RemoteDesktop">
+              <Active>true</Active>
+              <Group>Remote Desktop</Group>
+              <Profile>all</Profile>
+            </FirewallGroup>
+          </FirewallGroups>
+        </component>
+
+        <component name="Microsoft-Windows-TerminalServices-RDP-WinStationExtensions"
+                   processorArchitecture="amd64"
+                   publicKeyToken="31bf3856ad364e35"
+                   language="neutral" versionScope="nonSxS"
+                   xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+          <UserAuthentication>0</UserAuthentication>
+        </component>
+      </settings>
+
+      <!-- ===== OOBE: admin password, skip prompts, DC promo script ===== -->
+      <settings pass="oobeSystem">
+        <component name="Microsoft-Windows-Shell-Setup"
+                   processorArchitecture="amd64"
+                   publicKeyToken="31bf3856ad364e35"
+                   language="neutral" versionScope="nonSxS"
+                   xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+          <OOBE>
+            <HideEULAPage>true</HideEULAPage>
+            <HideLocalAccountScreen>true</HideLocalAccountScreen>
+            <HideOEMRegistrationScreen>true</HideOEMRegistrationScreen>
+            <HideOnlineAccountScreens>true</HideOnlineAccountScreens>
+            <HideWirelessSetupInOOBE>true</HideWirelessSetupInOOBE>
+            <ProtectYourPC>3</ProtectYourPC>
+            <SkipMachineOOBE>true</SkipMachineOOBE>
+            <SkipUserOOBE>true</SkipUserOOBE>
+          </OOBE>
+          <UserAccounts>
+            <AdministratorPassword>
+              <Value>P@ssw0rd2025!</Value>
+              <PlainText>true</PlainText>
+            </AdministratorPassword>
+          </UserAccounts>
+          <AutoLogon>
+            <Enabled>true</Enabled>
+            <Username>Administrator</Username>
+            <Password>
+              <Value>P@ssw0rd2025!</Value>
+              <PlainText>true</PlainText>
+            </Password>
+            <LogonCount>3</LogonCount>
+          </AutoLogon>
+          <FirstLogonCommands>
+            <!-- Enable RDP and firewall rule for all profiles including Domain -->
+            <SynchronousCommand wcm:action="add">
+              <Order>1</Order>
+              <CommandLine>powershell.exe -NoProfile -Command "Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name fDenyTSConnections -Value 0; Enable-NetFirewallRule -DisplayGroup 'Remote Desktop'; Set-NetFirewallRule -DisplayGroup 'Remote Desktop' -Profile Any"</CommandLine>
+              <Description>Enable RDP for all firewall profiles</Description>
+            </SynchronousCommand>
+            <!-- Install AD DS role -->
+            <SynchronousCommand wcm:action="add">
+              <Order>2</Order>
+              <CommandLine>powershell.exe -NoProfile -Command "Install-WindowsFeature -Name AD-Domain-Services -IncludeManagementTools"</CommandLine>
+              <Description>Install AD DS Role</Description>
+            </SynchronousCommand>
+            <!-- Promote to Domain Controller (new forest), suppress reboot -->
+            <SynchronousCommand wcm:action="add">
+              <Order>3</Order>
+              <CommandLine>powershell.exe -NoProfile -Command "Import-Module ADDSDeployment; Install-ADDSForest -DomainName 'lab.local' -DomainNetbiosName 'LAB' -SafeModeAdministratorPassword (ConvertTo-SecureString 'P@ssw0rd2025!' -AsPlainText -Force) -InstallDns:$true -NoRebootOnCompletion:$true -Force:$true"</CommandLine>
+              <Description>Promote to DC - lab.local</Description>
+            </SynchronousCommand>
+            <!-- Re-enable RDP firewall rule after DC promo changes profiles -->
+            <SynchronousCommand wcm:action="add">
+              <Order>4</Order>
+              <CommandLine>powershell.exe -NoProfile -Command "Enable-NetFirewallRule -DisplayGroup 'Remote Desktop'; netsh advfirewall firewall set rule group='Remote Desktop' new enable=yes profile=any"</CommandLine>
+              <Description>Re-enable RDP firewall after DC promo</Description>
+            </SynchronousCommand>
+            <!-- Reboot to complete DC promo -->
+            <SynchronousCommand wcm:action="add">
+              <Order>5</Order>
+              <CommandLine>powershell.exe -NoProfile -Command "Restart-Computer -Force"</CommandLine>
+              <Description>Reboot after DC promo</Description>
+            </SynchronousCommand>
+          </FirstLogonCommands>
+        </component>
+      </settings>
+    </unattend>
+---
+# DataVolume: Downloads Windows Server 2025 Eval ISO via CDI
+apiVersion: cdi.kubevirt.io/v1beta1
+kind: DataVolume
+metadata:
+  name: windows-iso
+  namespace: windows-dc
+spec:
+  source:
+    http:
+      url: "https://software-static.download.prss.microsoft.com/dbazure/888969d5-f34g-4e03-ac9d-1f9786c66749/26100.1742.240906-0331.ge_release_svc_refresh_SERVER_EVAL_x64FRE_en-us.iso"
+  storage:
+    accessModes:
+      - ReadWriteOnce
+    resources:
+      requests:
+        storage: 8Gi
+---
+# DataVolume: Empty disk for Windows installation target
+apiVersion: cdi.kubevirt.io/v1beta1
+kind: DataVolume
+metadata:
+  name: windows-disk
+  namespace: windows-dc
+spec:
+  source:
+    blank: {}
+  storage:
+    accessModes:
+      - ReadWriteOnce
+    resources:
+      requests:
+        storage: 60Gi
+---
+# DataVolume: VirtIO drivers ISO (required for Windows to see virtio disk/net)
+apiVersion: cdi.kubevirt.io/v1beta1
+kind: DataVolume
+metadata:
+  name: virtio-drivers
+  namespace: windows-dc
+spec:
+  source:
+    http:
+      url: "https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/stable-virtio/virtio-win.iso"
+  storage:
+    accessModes:
+      - ReadWriteOnce
+    resources:
+      requests:
+        storage: 1Gi
+---
+# VirtualMachine: Windows Server 2025 Core — Domain Controller
+apiVersion: kubevirt.io/v1
+kind: VirtualMachine
+metadata:
+  name: dc01
+  namespace: windows-dc
+  labels:
+    app: windows-dc
+spec:
+  running: true
+  template:
+    metadata:
+      labels:
+        app: windows-dc
+        kubevirt.io/domain: dc01
+    spec:
+      domain:
+        cpu:
+          cores: 4
+          sockets: 1
+          threads: 1
+        memory:
+          guest: 8Gi
+        machine:
+          type: q35
+        clock:
+          utc: {}
+          timer:
+            hpet:
+              present: false
+            pit:
+              tickPolicy: delay
+            rtc:
+              tickPolicy: catchup
+            hyperv: {}
+        features:
+          acpi: {}
+          apic: {}
+          hyperv:
+            relaxed: {}
+            vapic: {}
+            spinlocks:
+              spinlocks: 8191
+            vpindex: {}
+            runtime: {}
+            synic: {}
+            reset: {}
+            frequencies: {}
+            reenlightenment: {}
+            tlbflush: {}
+            ipi: {}
+        devices:
+          disks:
+            - name: windows-disk
+              disk:
+                bus: virtio
+              bootOrder: 1
+            - name: windows-iso
+              cdrom:
+                bus: sata
+              bootOrder: 2
+            - name: virtio-drivers
+              cdrom:
+                bus: sata
+            - name: sysprep
+              cdrom:
+                bus: sata
+          interfaces:
+            - name: default
+              masquerade: {}
+          tpm: {}
+      networks:
+        - name: default
+          pod: {}
+      volumes:
+        - name: windows-disk
+          dataVolume:
+            name: windows-disk
+        - name: windows-iso
+          dataVolume:
+            name: windows-iso
+        - name: virtio-drivers
+          dataVolume:
+            name: virtio-drivers
+        - name: sysprep
+          sysprep:
+            configMap:
+              name: windows-unattend
+      terminationGracePeriodSeconds: 60
+---
+# Service: RDP access via NodePort
+apiVersion: v1
+kind: Service
+metadata:
+  name: dc01-rdp
+  namespace: windows-dc
+spec:
+  type: NodePort
+  selector:
+    kubevirt.io/domain: dc01
+  ports:
+    - name: rdp
+      port: 3389
+      targetPort: 3389
+      protocol: TCP
