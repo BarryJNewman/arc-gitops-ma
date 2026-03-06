@@ -1,7 +1,7 @@
 ---
 # StorageClass: local-storage using no-provisioner
-# PVs are pre-created by rke2-arc-setup.sh on first boot.
-# Works on both physical bare metal and Proxmox VMs.
+# PVs are defined alongside each app (e.g. windows-dc/, security-onion/).
+# Host directories are created by rke2-arc-setup.sh on first boot.
 apiVersion: storage.k8s.io/v1
 kind: StorageClass
 metadata:

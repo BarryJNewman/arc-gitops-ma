@@ -1,0 +1,54 @@
+---
+# PVs for Security Onion KubeVirt DataVolumes
+# Sizes include ~10% headroom for CDI overhead on import
+# Each CDI import creates a data PVC + scratch PVC of equal size
+# claimRef ensures deterministic binding (no random PV assignment)
+# hostPath directories created by rke2-arc-setup.sh at first boot
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: securityonion-iso-pv
+spec:
+  capacity:
+    storage: 18Gi
+  accessModes: ["ReadWriteOnce"]
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: local-storage
+  claimRef:
+    name: securityonion-iso
+    namespace: security-onion
+  local:
+    path: /opt/kubevirt-storage/securityonion-iso
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: securityonion-iso-scratch-pv
+spec:
+  capacity:
+    storage: 18Gi
+  accessModes: ["ReadWriteOnce"]
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: local-storage
+  claimRef:
+    name: securityonion-iso-scratch
+    namespace: security-onion
+  local:
+    path: /opt/kubevirt-storage/securityonion-iso-scratch
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: securityonion-disk-pv
+spec:
+  capacity:
+    storage: 210Gi
+  accessModes: ["ReadWriteOnce"]
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: local-storage
+  claimRef:
+    name: securityonion-disk
+    namespace: security-onion
+  local:
+    path: /opt/kubevirt-storage/securityonion-disk
