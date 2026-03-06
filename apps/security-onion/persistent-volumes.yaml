@@ -4,6 +4,7 @@
 # Each CDI import creates a data PVC + scratch PVC of equal size
 # claimRef ensures deterministic binding (no random PV assignment)
 # hostPath directories created by rke2-arc-setup.sh at first boot
+# nodeAffinity uses kubernetes.io/os=linux (works on any Linux node)
 ---
 apiVersion: v1
 kind: PersistentVolume
@@ -20,6 +21,13 @@ spec:
     namespace: security-onion
   local:
     path: /opt/kubevirt-storage/securityonion-iso
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: kubernetes.io/os
+              operator: In
+              values: ["linux"]
 ---
 apiVersion: v1
 kind: PersistentVolume
@@ -36,6 +44,13 @@ spec:
     namespace: security-onion
   local:
     path: /opt/kubevirt-storage/securityonion-iso-scratch
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: kubernetes.io/os
+              operator: In
+              values: ["linux"]
 ---
 apiVersion: v1
 kind: PersistentVolume
@@ -52,3 +67,10 @@ spec:
     namespace: security-onion
   local:
     path: /opt/kubevirt-storage/securityonion-disk
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: kubernetes.io/os
+              operator: In
+              values: ["linux"]
