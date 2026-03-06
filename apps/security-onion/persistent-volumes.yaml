@@ -58,7 +58,7 @@ metadata:
   name: securityonion-disk-pv
 spec:
   capacity:
-    storage: 210Gi
+    storage: 230Gi
   accessModes: ["ReadWriteOnce"]
   persistentVolumeReclaimPolicy: Retain
   storageClassName: local-storage
