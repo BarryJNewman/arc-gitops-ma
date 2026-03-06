@@ -18,6 +18,8 @@ spec:
         app: authentik
         component: server
     spec:
+      securityContext:
+        fsGroup: 1000
       volumes:
         - name: authentik-media
           hostPath:
@@ -104,6 +106,17 @@ spec:
         app: authentik
         component: worker
     spec:
+      securityContext:
+        fsGroup: 1000
+      initContainers:
+        - name: fix-media-perms
+          image: busybox:1.36
+          command: ["sh", "-c", "chown -R 1000:1000 /media /templates"]
+          volumeMounts:
+            - mountPath: /media
+              name: authentik-media
+            - mountPath: /templates
+              name: authentik-templates
       volumes:
         - name: authentik-media
           hostPath:
