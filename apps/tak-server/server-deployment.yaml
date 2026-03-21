@@ -33,7 +33,7 @@ spec:
               done
               echo "  DB is ready."
         - name: schema-upgrade
-          image: arconboardacr.azurecr.io/takserver-db:5.5-RELEASE-45
+          image: ${ARC_ACR_LOGIN_SERVER}/takserver-db:5.5-RELEASE-45
           imagePullPolicy: Always
           command:
             - bash
@@ -47,7 +47,7 @@ spec:
               echo "=== SchemaManager complete ==="
       containers:
         - name: takserver
-          image: arconboardacr.azurecr.io/takserver:5.5-RELEASE-45
+          image: ${ARC_ACR_LOGIN_SERVER}/takserver:5.5-RELEASE-45
           imagePullPolicy: Always
           ports:
             - containerPort: 8089

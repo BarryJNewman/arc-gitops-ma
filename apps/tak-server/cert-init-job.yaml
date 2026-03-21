@@ -20,7 +20,7 @@ spec:
         - name: acr-pull-secret
       containers:
         - name: cert-gen
-          image: arconboardacr.azurecr.io/takserver:5.5-RELEASE-45
+          image: ${ARC_ACR_LOGIN_SERVER}/takserver:5.5-RELEASE-45
           imagePullPolicy: Always
           command:
             - bash

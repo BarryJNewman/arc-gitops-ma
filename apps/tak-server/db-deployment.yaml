@@ -21,7 +21,7 @@ spec:
         - name: acr-pull-secret
       containers:
         - name: takserver-db
-          image: arconboardacr.azurecr.io/takserver-db:5.5-RELEASE-45
+          image: ${ARC_ACR_LOGIN_SERVER}/takserver-db:5.5-RELEASE-45
           imagePullPolicy: Always
           env:
             - name: POSTGRES_HOST_AUTH_METHOD
