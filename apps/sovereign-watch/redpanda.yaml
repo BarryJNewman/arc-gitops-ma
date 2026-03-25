@@ -23,8 +23,6 @@ spec:
             - rpk
             - redpanda
             - start
-            - --config
-            - /etc/redpanda/redpanda.yaml
           ports:
             - containerPort: 9092
               name: kafka
