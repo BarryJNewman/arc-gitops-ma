@@ -86,6 +86,18 @@ spec:
               value: "150"
             - name: OPENSKY_ENABLED
               value: "false"
+            - name: OPENSKY_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: sovereign-watch-poller-secrets
+                  key: OPENSKY_CLIENT_ID
+                  optional: true
+            - name: OPENSKY_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: sovereign-watch-poller-secrets
+                  key: OPENSKY_CLIENT_SECRET
+                  optional: true
           resources:
             requests:
               cpu: 50m
@@ -248,6 +260,24 @@ spec:
               value: "-122.6784"
             - name: COVERAGE_RADIUS_NM
               value: "150"
+            - name: RADIOREF_APP_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: sovereign-watch-poller-secrets
+                  key: RADIOREF_APP_KEY
+                  optional: true
+            - name: RADIOREF_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: sovereign-watch-poller-secrets
+                  key: RADIOREF_USERNAME
+                  optional: true
+            - name: RADIOREF_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: sovereign-watch-poller-secrets
+                  key: RADIOREF_PASSWORD
+                  optional: true
           resources:
             requests:
               cpu: 50m
