@@ -23,6 +23,18 @@ spec:
             - rpk
             - redpanda
             - start
+            - --mode
+            - dev
+            - --kafka-addr
+            - internal://0.0.0.0:9092
+            - --advertise-kafka-addr
+            - internal://sovereign-watch-redpanda:9092
+            - --pandaproxy-addr
+            - internal://0.0.0.0:8082
+            - --advertise-pandaproxy-addr
+            - internal://sovereign-watch-redpanda:8082
+            - --schema-registry-addr
+            - internal://0.0.0.0:8081
           ports:
             - containerPort: 9092
               name: kafka
@@ -33,8 +45,6 @@ spec:
           volumeMounts:
             - name: data
               mountPath: /var/lib/redpanda/data
-            - name: config
-              mountPath: /etc/redpanda
           resources:
             requests:
               cpu: 250m
@@ -57,9 +67,6 @@ spec:
           hostPath:
             path: /var/lib/sovereign-watch/redpanda
             type: DirectoryOrCreate
-        - name: config
-          configMap:
-            name: sovereign-watch-redpanda-config
 ---
 apiVersion: v1
 kind: Service
