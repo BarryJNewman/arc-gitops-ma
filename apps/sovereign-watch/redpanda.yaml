@@ -23,8 +23,7 @@ spec:
             - rpk
             - redpanda
             - start
-            - --mode
-            - dev
+            - --check=false
             - --kafka-addr
             - internal://0.0.0.0:9092
             - --advertise-kafka-addr
