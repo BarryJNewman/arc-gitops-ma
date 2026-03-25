@@ -19,14 +19,14 @@ spec:
         - name: oauth2-proxy
           image: quay.io/oauth2-proxy/oauth2-proxy:latest
           args:
-            - --provider=azure
-            - --azure-tenant=${ARC_TENANT_ID}
+            - --provider=oidc
             - --oidc-issuer-url=https://login.microsoftonline.us/${ARC_TENANT_ID}/v2.0
+            - --oidc-email-claim=preferred_username
             - --http-address=0.0.0.0:4180
             - --upstream=http://sovereign-watch-frontend:80
             - --redirect-url=https://sovereign.darkoverlay.com/oauth2/callback
             - --email-domain=*
-            - --scope=openid profile email
+            - --scope=openid profile email User.Read
             - --cookie-domain=.darkoverlay.com
             - --cookie-secure=true
             - --cookie-samesite=lax
