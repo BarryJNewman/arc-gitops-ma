@@ -32,7 +32,7 @@ metadata:
     nginx.ingress.kubernetes.io/proxy-body-size: "50m"
     nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
     nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
-    nginx.ingress.kubernetes.io/auth-url: "https://sovereign.darkoverlay.com/oauth2/auth"
+    nginx.ingress.kubernetes.io/auth-url: "http://sovereign-watch-oauth2-proxy.sovereign-watch.svc.cluster.local:4180/oauth2/auth"
     nginx.ingress.kubernetes.io/auth-signin: "https://sovereign.darkoverlay.com/oauth2/start?rd=$escaped_request_uri"
     nginx.ingress.kubernetes.io/auth-response-headers: "X-Auth-Request-User,X-Auth-Request-Email,X-Auth-Request-Access-Token"
 spec:
