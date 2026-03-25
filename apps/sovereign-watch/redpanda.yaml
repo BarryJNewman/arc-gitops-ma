@@ -1,0 +1,88 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: sovereign-watch-redpanda
+  namespace: sovereign-watch
+spec:
+  serviceName: sovereign-watch-redpanda
+  replicas: 1
+  selector:
+    matchLabels:
+      app: sovereign-watch
+      component: redpanda
+  template:
+    metadata:
+      labels:
+        app: sovereign-watch
+        component: redpanda
+    spec:
+      containers:
+        - name: redpanda
+          image: docker.redpanda.com/redpandadata/redpanda:latest
+          command:
+            - redpanda
+            - start
+            - --smp=1
+            - --memory=1G
+            - --reserve-memory=0M
+            - --overprovisioned
+            - --node-id=0
+            - --check=false
+            - --kafka-addr=internal://0.0.0.0:9092
+            - --advertise-kafka-addr=internal://sovereign-watch-redpanda:9092
+            - --pandaproxy-addr=internal://0.0.0.0:8082
+            - --advertise-pandaproxy-addr=internal://sovereign-watch-redpanda:8082
+            - --schema-registry-addr=internal://0.0.0.0:8081
+          ports:
+            - containerPort: 9092
+              name: kafka
+            - containerPort: 8082
+              name: pandaproxy
+            - containerPort: 8081
+              name: schema-reg
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/redpanda/data
+          resources:
+            requests:
+              cpu: 250m
+              memory: 1Gi
+            limits:
+              memory: 2Gi
+          readinessProbe:
+            exec:
+              command: ["rpk", "cluster", "health"]
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            failureThreshold: 6
+          livenessProbe:
+            exec:
+              command: ["rpk", "cluster", "health"]
+            initialDelaySeconds: 30
+            periodSeconds: 30
+      volumes:
+        - name: data
+          hostPath:
+            path: /var/lib/sovereign-watch/redpanda
+            type: DirectoryOrCreate
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: sovereign-watch-redpanda
+  namespace: sovereign-watch
+spec:
+  clusterIP: None
+  selector:
+    app: sovereign-watch
+    component: redpanda
+  ports:
+    - name: kafka
+      port: 9092
+      targetPort: 9092
+    - name: pandaproxy
+      port: 8082
+      targetPort: 8082
+    - name: schema-reg
+      port: 8081
+      targetPort: 8081

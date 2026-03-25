@@ -1,0 +1,55 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sovereign-watch-frontend
+  namespace: sovereign-watch
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: sovereign-watch
+      component: frontend
+  template:
+    metadata:
+      labels:
+        app: sovereign-watch
+        component: frontend
+    spec:
+      containers:
+        - name: frontend
+          image: ${ARC_ACR_LOGIN_SERVER}/sovereign-watch-frontend:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 80
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              memory: 256Mi
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 80
+            periodSeconds: 30
+      imagePullSecrets:
+        - name: acr-pull-secret
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: sovereign-watch-frontend
+  namespace: sovereign-watch
+spec:
+  selector:
+    app: sovereign-watch
+    component: frontend
+  ports:
+    - port: 80
+      targetPort: 80

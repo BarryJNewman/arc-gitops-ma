@@ -1,0 +1,310 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: sovereign-watch-db-init
+  namespace: sovereign-watch
+data:
+  init.sql: |
+    -- Enable Extensions
+    CREATE EXTENSION IF NOT EXISTS timescaledb;
+    DO $$
+    BEGIN
+        ALTER EXTENSION timescaledb UPDATE;
+    EXCEPTION WHEN OTHERS THEN
+        RAISE NOTICE 'Could not update timescaledb extension during init (%), will be retried at backend startup.', SQLERRM;
+    END;
+    $$;
+    CREATE EXTENSION IF NOT EXISTS postgis;
+    CREATE EXTENSION IF NOT EXISTS vector;
+    CREATE EXTENSION IF NOT EXISTS ai CASCADE;
+    CREATE EXTENSION IF NOT EXISTS pg_trgm;
+
+    -- TABLE: tracks (High-velocity telemetry)
+    CREATE TABLE IF NOT EXISTS tracks (
+        time        TIMESTAMPTZ NOT NULL,
+        entity_id   TEXT NOT NULL,
+        type        TEXT,
+        lat         DOUBLE PRECISION,
+        lon         DOUBLE PRECISION,
+        alt         DOUBLE PRECISION,
+        speed       DOUBLE PRECISION,
+        heading     DOUBLE PRECISION,
+        meta        JSONB,
+        geom        GEOMETRY(POINT, 4326)
+    );
+    SELECT create_hypertable('tracks', 'time', if_not_exists => TRUE, chunk_time_interval => INTERVAL '1 day');
+    ALTER TABLE tracks SET (
+        timescaledb.compress,
+        timescaledb.compress_segmentby = 'entity_id',
+        timescaledb.compress_orderby = 'time DESC'
+    );
+    DO $$
+    DECLARE _job_id INTEGER;
+    BEGIN
+        SELECT job_id INTO _job_id FROM timescaledb_information.jobs
+        WHERE hypertable_name = 'tracks' AND proc_name = 'policy_compression';
+        IF _job_id IS NOT NULL THEN
+            PERFORM alter_job(_job_id, config => jsonb_build_object('compress_after', '4 hours'));
+        END IF;
+    EXCEPTION WHEN OTHERS THEN NULL;
+    END;
+    $$;
+    SELECT add_compression_policy('tracks', INTERVAL '4 hours');
+    SELECT add_retention_policy('tracks', INTERVAL '72 hours');
+    CREATE INDEX IF NOT EXISTS ix_tracks_geom ON tracks USING GIST (geom);
+    CREATE INDEX IF NOT EXISTS ix_tracks_entity_time ON tracks (entity_id, time DESC);
+    CREATE INDEX IF NOT EXISTS ix_tracks_entity_id_trgm ON tracks USING gin (entity_id gin_trgm_ops);
+    CREATE INDEX IF NOT EXISTS ix_tracks_meta_callsign_trgm ON tracks USING gin ((meta->>'callsign') gin_trgm_ops);
+
+    -- TABLE: satellites
+    CREATE TABLE IF NOT EXISTS satellites (
+        norad_id        TEXT PRIMARY KEY,
+        name            TEXT,
+        category        TEXT,
+        constellation   TEXT,
+        tle_line1       TEXT NOT NULL,
+        tle_line2       TEXT NOT NULL,
+        period_min      FLOAT,
+        inclination_deg FLOAT,
+        eccentricity    FLOAT,
+        updated_at      TIMESTAMPTZ DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS ix_satellites_constellation ON satellites (constellation);
+
+    -- TABLE: rf_sites
+    CREATE TABLE IF NOT EXISTS rf_sites (
+        id           UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+        source       TEXT NOT NULL,
+        site_id      TEXT NOT NULL,
+        service      TEXT NOT NULL,
+        callsign     TEXT,
+        name         TEXT,
+        lat          DOUBLE PRECISION NOT NULL,
+        lon          DOUBLE PRECISION NOT NULL,
+        output_freq  DOUBLE PRECISION,
+        input_freq   DOUBLE PRECISION,
+        tone_ctcss   DOUBLE PRECISION,
+        tone_dcs     TEXT,
+        modes        TEXT[],
+        use_access   TEXT,
+        status       TEXT DEFAULT 'Unknown',
+        city         TEXT,
+        state        TEXT,
+        country      TEXT DEFAULT 'US',
+        emcomm_flags TEXT[],
+        meta         JSONB,
+        geom         GEOMETRY(POINT, 4326),
+        fetched_at   TIMESTAMPTZ DEFAULT NOW(),
+        updated_at   TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE (source, site_id)
+    );
+    CREATE INDEX IF NOT EXISTS ix_rf_sites_geom      ON rf_sites USING GIST (geom);
+    CREATE INDEX IF NOT EXISTS ix_rf_sites_service    ON rf_sites (service);
+    CREATE INDEX IF NOT EXISTS ix_rf_sites_source     ON rf_sites (source);
+    CREATE INDEX IF NOT EXISTS ix_rf_sites_callsign   ON rf_sites USING gin (callsign gin_trgm_ops);
+    CREATE INDEX IF NOT EXISTS ix_rf_sites_modes      ON rf_sites USING GIN (modes);
+    CREATE INDEX IF NOT EXISTS ix_rf_sites_emcomm     ON rf_sites USING GIN (emcomm_flags);
+
+    -- TABLE: rf_systems
+    CREATE TABLE IF NOT EXISTS rf_systems (
+        id         UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+        source     TEXT DEFAULT 'radioref',
+        rr_sid     TEXT UNIQUE,
+        name       TEXT NOT NULL,
+        type       TEXT,
+        state      TEXT,
+        county     TEXT,
+        meta       JSONB,
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS ix_rf_systems_state ON rf_systems (state);
+
+    -- TABLE: rf_talkgroups
+    CREATE TABLE IF NOT EXISTS rf_talkgroups (
+        id          UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+        system_id   UUID REFERENCES rf_systems(id) ON DELETE CASCADE,
+        decimal_id  INTEGER NOT NULL,
+        alpha_tag   TEXT,
+        description TEXT,
+        category    TEXT,
+        priority    INTEGER DEFAULT 3,
+        updated_at  TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE (system_id, decimal_id)
+    );
+    CREATE INDEX IF NOT EXISTS ix_rf_talkgroups_system ON rf_talkgroups (system_id);
+    CREATE INDEX IF NOT EXISTS ix_rf_talkgroups_cat    ON rf_talkgroups (category);
+
+    -- TABLE: intel_reports
+    CREATE TABLE IF NOT EXISTS intel_reports (
+        id          UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+        timestamp   TIMESTAMPTZ DEFAULT NOW(),
+        content     TEXT,
+        embedding   vector(384),
+        geom        GEOMETRY(POINT, 4326)
+    );
+    CREATE INDEX IF NOT EXISTS ix_intel_embedding ON intel_reports USING hnsw (embedding vector_cosine_ops);
+    CREATE INDEX IF NOT EXISTS ix_intel_geom ON intel_reports USING GIST (geom);
+
+    CREATE OR REPLACE FUNCTION get_contextual_intel(
+        query_embedding vector(384),
+        search_radius_meters FLOAT,
+        center_point GEOMETRY
+    )
+    RETURNS TABLE (id UUID, content TEXT, distance FLOAT, geom GEOMETRY) AS $$
+    BEGIN
+        RETURN QUERY
+        SELECT ir.id, ir.content, (ir.embedding <=> query_embedding) as distance, ir.geom
+        FROM intel_reports ir
+        WHERE ST_DWithin(ir.geom::geography, center_point::geography, search_radius_meters)
+        ORDER BY distance ASC LIMIT 5;
+    END;
+    $$ LANGUAGE plpgsql;
+
+    -- TABLE: infra_towers
+    CREATE TABLE IF NOT EXISTS infra_towers (
+        id          UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+        fcc_id      TEXT UNIQUE,
+        type        TEXT,
+        owner       TEXT,
+        status      TEXT,
+        height_m    DOUBLE PRECISION,
+        elevation_m DOUBLE PRECISION,
+        lat         DOUBLE PRECISION NOT NULL,
+        lon         DOUBLE PRECISION NOT NULL,
+        geom        GEOMETRY(POINT, 4326),
+        updated_at  TIMESTAMPTZ DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS ix_infra_towers_geom ON infra_towers USING GIST (geom);
+
+    CREATE OR REPLACE FUNCTION prune_stale_rf_sites() RETURNS INTEGER AS $$
+    DECLARE deleted INTEGER;
+    BEGIN
+        DELETE FROM rf_sites WHERE updated_at < NOW() - INTERVAL '30 days';
+        GET DIAGNOSTICS deleted = ROW_COUNT;
+        RETURN deleted;
+    END;
+    $$ LANGUAGE plpgsql;
+
+    -- TABLE: space_weather_kp
+    CREATE TABLE IF NOT EXISTS space_weather_kp (
+        time        TIMESTAMPTZ NOT NULL,
+        kp          FLOAT NOT NULL,
+        kp_fraction FLOAT,
+        storm_level TEXT,
+        source      TEXT DEFAULT 'noaa_swpc'
+    );
+    SELECT create_hypertable('space_weather_kp', 'time', if_not_exists => TRUE, chunk_time_interval => INTERVAL '1 day');
+    SELECT add_retention_policy('space_weather_kp', INTERVAL '7 days');
+    CREATE INDEX IF NOT EXISTS ix_swkp_time ON space_weather_kp (time DESC);
+
+    -- TABLE: jamming_events
+    CREATE TABLE IF NOT EXISTS jamming_events (
+        time            TIMESTAMPTZ NOT NULL,
+        h3_index        TEXT NOT NULL,
+        centroid_lat    DOUBLE PRECISION,
+        centroid_lon    DOUBLE PRECISION,
+        confidence      FLOAT,
+        affected_count  INTEGER,
+        avg_nic         FLOAT,
+        avg_nacp        FLOAT,
+        kp_at_event     FLOAT,
+        active          BOOLEAN DEFAULT TRUE,
+        assessment      TEXT
+    );
+    SELECT create_hypertable('jamming_events', 'time', if_not_exists => TRUE, chunk_time_interval => INTERVAL '1 day');
+    SELECT add_retention_policy('jamming_events', INTERVAL '7 days');
+    CREATE INDEX IF NOT EXISTS ix_jamming_h3_time  ON jamming_events (h3_index, time DESC);
+    CREATE INDEX IF NOT EXISTS ix_jamming_active    ON jamming_events (active, time DESC);
+    CREATE INDEX IF NOT EXISTS ix_jamming_centroid  ON jamming_events USING GIST (
+        ST_SetSRID(ST_MakePoint(centroid_lon, centroid_lat), 4326)
+    ) WHERE centroid_lat IS NOT NULL AND centroid_lon IS NOT NULL;
+
+    -- TABLE: satnogs_transmitters
+    CREATE TABLE IF NOT EXISTS satnogs_transmitters (
+        uuid            TEXT PRIMARY KEY,
+        norad_id        TEXT NOT NULL,
+        sat_name        TEXT,
+        description     TEXT,
+        alive           BOOLEAN DEFAULT TRUE,
+        type            TEXT DEFAULT 'Transmitter',
+        uplink_low      BIGINT,
+        uplink_high     BIGINT,
+        downlink_low    BIGINT,
+        downlink_high   BIGINT,
+        mode            TEXT,
+        invert          BOOLEAN DEFAULT FALSE,
+        baud            FLOAT,
+        status          TEXT DEFAULT 'active',
+        updated_at      TIMESTAMPTZ DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS ix_satnogs_tx_norad ON satnogs_transmitters (norad_id);
+    CREATE INDEX IF NOT EXISTS ix_satnogs_tx_mode  ON satnogs_transmitters (mode);
+
+    -- TABLE: satnogs_observations
+    CREATE TABLE IF NOT EXISTS satnogs_observations (
+        time               TIMESTAMPTZ NOT NULL,
+        observation_id     BIGINT NOT NULL,
+        norad_id           TEXT NOT NULL,
+        ground_station_id  INTEGER,
+        transmitter_uuid   TEXT,
+        frequency          BIGINT,
+        mode               TEXT,
+        status             TEXT DEFAULT 'good',
+        rise_azimuth       FLOAT,
+        set_azimuth        FLOAT,
+        max_altitude       FLOAT,
+        has_audio          BOOLEAN DEFAULT FALSE,
+        has_waterfall      BOOLEAN DEFAULT FALSE,
+        vetted_status      TEXT,
+        tle0               TEXT,
+        tle1               TEXT,
+        tle2               TEXT,
+        fetched_at         TIMESTAMPTZ DEFAULT NOW()
+    );
+    SELECT create_hypertable('satnogs_observations', 'time', if_not_exists => TRUE, chunk_time_interval => INTERVAL '1 day');
+    SELECT add_retention_policy('satnogs_observations', INTERVAL '30 days');
+    CREATE UNIQUE INDEX IF NOT EXISTS ix_satnogs_obs_id_time ON satnogs_observations (observation_id, time);
+    CREATE INDEX IF NOT EXISTS ix_satnogs_obs_norad         ON satnogs_observations (norad_id, time DESC);
+    CREATE INDEX IF NOT EXISTS ix_satnogs_obs_station       ON satnogs_observations (ground_station_id);
+    CREATE INDEX IF NOT EXISTS ix_satnogs_obs_freq          ON satnogs_observations (frequency);
+
+    -- TABLE: gdelt_events
+    CREATE TABLE IF NOT EXISTS gdelt_events (
+        time            TIMESTAMPTZ NOT NULL,
+        event_id        TEXT NOT NULL,
+        actor1          TEXT,
+        actor2          TEXT,
+        headline        TEXT,
+        url             TEXT,
+        goldstein       FLOAT,
+        tone            FLOAT,
+        lat             DOUBLE PRECISION NOT NULL,
+        lon             DOUBLE PRECISION NOT NULL,
+        geom            GEOMETRY(POINT, 4326),
+        actor1_country  TEXT,
+        actor2_country  TEXT,
+        event_code      TEXT,
+        event_root_code TEXT,
+        quad_class      SMALLINT,
+        num_mentions    INT,
+        num_sources     INT,
+        num_articles    INT,
+        event_date      DATE,
+        UNIQUE (event_id, time)
+    );
+    ALTER TABLE gdelt_events ADD COLUMN IF NOT EXISTS actor1_country  TEXT;
+    ALTER TABLE gdelt_events ADD COLUMN IF NOT EXISTS actor2_country  TEXT;
+    ALTER TABLE gdelt_events ADD COLUMN IF NOT EXISTS event_code      TEXT;
+    ALTER TABLE gdelt_events ADD COLUMN IF NOT EXISTS event_root_code TEXT;
+    ALTER TABLE gdelt_events ADD COLUMN IF NOT EXISTS quad_class      SMALLINT;
+    ALTER TABLE gdelt_events ADD COLUMN IF NOT EXISTS num_mentions    INT;
+    ALTER TABLE gdelt_events ADD COLUMN IF NOT EXISTS num_sources     INT;
+    ALTER TABLE gdelt_events ADD COLUMN IF NOT EXISTS num_articles    INT;
+    ALTER TABLE gdelt_events ADD COLUMN IF NOT EXISTS event_date      DATE;
+    SELECT create_hypertable('gdelt_events', 'time', if_not_exists => TRUE, chunk_time_interval => INTERVAL '1 day');
+    SELECT add_retention_policy('gdelt_events', INTERVAL '7 days');
+    ALTER TABLE gdelt_events SET (timescaledb.compress, timescaledb.compress_segmentby = 'event_id');
+    SELECT add_compression_policy('gdelt_events', INTERVAL '1 day');
+    CREATE INDEX IF NOT EXISTS ix_gdelt_geom ON gdelt_events USING GIST (geom);
+    CREATE INDEX IF NOT EXISTS ix_gdelt_time ON gdelt_events (time DESC);
+    CREATE INDEX IF NOT EXISTS ix_gdelt_tone ON gdelt_events (tone);

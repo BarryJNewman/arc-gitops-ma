@@ -1,0 +1,95 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: sovereign-watch-db
+  namespace: sovereign-watch
+spec:
+  serviceName: sovereign-watch-db
+  replicas: 1
+  selector:
+    matchLabels:
+      app: sovereign-watch
+      component: db
+  template:
+    metadata:
+      labels:
+        app: sovereign-watch
+        component: db
+    spec:
+      initContainers:
+        - name: fix-perms
+          image: busybox:1.36
+          command: ["sh", "-c", "chown -R 1000:1000 /home/postgres/pgdata"]
+          volumeMounts:
+            - name: data
+              mountPath: /home/postgres/pgdata
+      containers:
+        - name: timescaledb
+          image: timescale/timescaledb-ha:pg16
+          env:
+            - name: POSTGRES_DB
+              value: sovereign_watch
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: sovereign-watch-secrets
+                  key: POSTGRES_PASSWORD
+            - name: POSTGRES_HOST_AUTH_METHOD
+              value: "md5"
+          ports:
+            - containerPort: 5432
+          volumeMounts:
+            - name: data
+              mountPath: /home/postgres/pgdata
+              subPath: pgdata
+            - name: init-sql
+              mountPath: /docker-entrypoint-initdb.d/init.sql
+              subPath: init.sql
+            - name: akv-secrets
+              mountPath: /mnt/akv-secrets
+              readOnly: true
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              memory: 2Gi
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "postgres"]
+            periodSeconds: 5
+            failureThreshold: 6
+          livenessProbe:
+            exec:
+              command: ["pg_isready", "-U", "postgres"]
+            periodSeconds: 30
+      volumes:
+        - name: data
+          hostPath:
+            path: /var/lib/sovereign-watch/timescaledb
+            type: DirectoryOrCreate
+        - name: init-sql
+          configMap:
+            name: sovereign-watch-db-init
+        - name: akv-secrets
+          csi:
+            driver: secrets-store.csi.k8s.io
+            readOnly: true
+            volumeAttributes:
+              secretProviderClass: akv-sovereign-watch
+            nodePublishSecretRef:
+              name: secrets-store-creds
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: sovereign-watch-db
+  namespace: sovereign-watch
+spec:
+  clusterIP: None
+  selector:
+    app: sovereign-watch
+    component: db
+  ports:
+    - port: 5432
+      targetPort: 5432

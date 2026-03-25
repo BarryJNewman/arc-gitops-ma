@@ -1,0 +1,74 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sovereign-watch-js8call
+  namespace: sovereign-watch
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: sovereign-watch
+      component: js8call
+  template:
+    metadata:
+      labels:
+        app: sovereign-watch
+        component: js8call
+    spec:
+      containers:
+        - name: js8call
+          image: ${ARC_ACR_LOGIN_SERVER}/sovereign-watch-js8call:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8080
+          env:
+            - name: KIWI_HOST
+              value: "kiwisdr.example.com"
+            - name: KIWI_PORT
+              value: "8073"
+            - name: KIWI_FREQ
+              value: "14078"
+            - name: KIWI_MODE
+              value: "usb"
+            - name: MY_GRID
+              value: "CN85"
+            - name: JS8CALL_HOST
+              value: "127.0.0.1"
+            - name: JS8CALL_PORT
+              value: "2442"
+            - name: BRIDGE_PORT
+              value: "8080"
+            - name: ALLOWED_ORIGINS
+              value: "https://sovereign.darkoverlay.com"
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              memory: 512Mi
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            periodSeconds: 30
+      imagePullSecrets:
+        - name: acr-pull-secret
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: sovereign-watch-js8call
+  namespace: sovereign-watch
+spec:
+  selector:
+    app: sovereign-watch
+    component: js8call
+  ports:
+    - port: 8080
+      targetPort: 8080

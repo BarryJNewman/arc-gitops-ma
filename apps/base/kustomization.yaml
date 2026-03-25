@@ -3,3 +3,4 @@ kind: Kustomization
 resources:
   - ../tak-server
   - ../authentik
+  - ../sovereign-watch

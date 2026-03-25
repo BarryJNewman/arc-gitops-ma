@@ -1,0 +1,58 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sovereign-watch-redis
+  namespace: sovereign-watch
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: sovereign-watch
+      component: redis
+  template:
+    metadata:
+      labels:
+        app: sovereign-watch
+        component: redis
+    spec:
+      containers:
+        - name: redis
+          image: redis:alpine
+          command: ["redis-server", "--appendonly", "yes"]
+          ports:
+            - containerPort: 6379
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              memory: 256Mi
+          readinessProbe:
+            exec:
+              command: ["redis-cli", "ping"]
+            periodSeconds: 5
+          livenessProbe:
+            exec:
+              command: ["redis-cli", "ping"]
+            periodSeconds: 15
+      volumes:
+        - name: data
+          hostPath:
+            path: /var/lib/sovereign-watch/redis
+            type: DirectoryOrCreate
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: sovereign-watch-redis
+  namespace: sovereign-watch
+spec:
+  selector:
+    app: sovereign-watch
+    component: redis
+  ports:
+    - port: 6379
+      targetPort: 6379
