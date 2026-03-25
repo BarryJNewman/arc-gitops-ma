@@ -6,6 +6,7 @@ resources:
   - db-init-configmap.yaml
   - db.yaml
   - redis.yaml
+  - redpanda-config.yaml
   - redpanda.yaml
   - backend.yaml
   - frontend.yaml

@@ -20,16 +20,11 @@ spec:
         - name: redpanda
           image: docker.redpanda.com/redpandadata/redpanda:v23.3.18
           command:
+            - rpk
             - redpanda
             - start
-            - --smp=1
-            - --memory=1G
-            - --overprovisioned
-            - --kafka-addr=0.0.0.0:9092
-            - --advertise-kafka-addr=sovereign-watch-redpanda:9092
-            - --pandaproxy-addr=0.0.0.0:8082
-            - --advertise-pandaproxy-addr=sovereign-watch-redpanda:8082
-            - --schema-registry-addr=0.0.0.0:8081
+            - --config
+            - /etc/redpanda/redpanda.yaml
           ports:
             - containerPort: 9092
               name: kafka
@@ -40,6 +35,8 @@ spec:
           volumeMounts:
             - name: data
               mountPath: /var/lib/redpanda/data
+            - name: config
+              mountPath: /etc/redpanda
           resources:
             requests:
               cpu: 250m
@@ -62,6 +59,9 @@ spec:
           hostPath:
             path: /var/lib/sovereign-watch/redpanda
             type: DirectoryOrCreate
+        - name: config
+          configMap:
+            name: sovereign-watch-redpanda-config
 ---
 apiVersion: v1
 kind: Service
