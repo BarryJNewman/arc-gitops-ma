@@ -20,7 +20,7 @@ spec:
           image: ${ARC_ACR_LOGIN_SERVER}/sovereign-watch-frontend:latest
           imagePullPolicy: Always
           ports:
-            - containerPort: 80
+            - containerPort: 3700
           resources:
             requests:
               cpu: 50m
@@ -30,13 +30,13 @@ spec:
           readinessProbe:
             httpGet:
               path: /
-              port: 80
+              port: 3700
             initialDelaySeconds: 5
             periodSeconds: 10
           livenessProbe:
             httpGet:
               path: /
-              port: 80
+              port: 3700
             periodSeconds: 30
       imagePullSecrets:
         - name: acr-pull-secret
@@ -52,4 +52,4 @@ spec:
     component: frontend
   ports:
     - port: 80
-      targetPort: 80
+      targetPort: 3700

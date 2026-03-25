@@ -74,6 +74,10 @@ spec:
               value: "sovereign-watch-redpanda:9092"
             - name: REDIS_URL
               value: "redis://sovereign-watch-redis:6379"
+            - name: REDIS_HOST
+              value: "sovereign-watch-redis"
+            - name: REDIS_PORT
+              value: "6379"
             - name: CENTER_LAT
               value: "45.5152"
             - name: CENTER_LON
