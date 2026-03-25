@@ -27,11 +27,11 @@ spec:
             - --reserve-memory=0M
             - --overprovisioned
             - --node-id=0
-            - --kafka-addr=internal://0.0.0.0:9092
-            - --advertise-kafka-addr=internal://sovereign-watch-redpanda:9092
-            - --pandaproxy-addr=internal://0.0.0.0:8082
-            - --advertise-pandaproxy-addr=internal://sovereign-watch-redpanda:8082
-            - --schema-registry-addr=internal://0.0.0.0:8081
+            - --kafka-addr=0.0.0.0:9092
+            - --advertise-kafka-addr=sovereign-watch-redpanda:9092
+            - --pandaproxy-addr=0.0.0.0:8082
+            - --advertise-pandaproxy-addr=sovereign-watch-redpanda:8082
+            - --schema-registry-addr=0.0.0.0:8081
           ports:
             - containerPort: 9092
               name: kafka
