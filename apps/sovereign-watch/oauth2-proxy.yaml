@@ -21,7 +21,7 @@ spec:
           args:
             - --provider=azure
             - --azure-tenant=${ARC_TENANT_ID}
-            - --oidc-issuer-url=https://login.microsoftonline.com/${ARC_TENANT_ID}/v2.0
+            - --oidc-issuer-url=https://login.microsoftonline.us/${ARC_TENANT_ID}/v2.0
             - --http-address=0.0.0.0:4180
             - --upstream=http://sovereign-watch-frontend:80
             - --redirect-url=https://sovereign.darkoverlay.com/oauth2/callback
