@@ -27,7 +27,6 @@ spec:
             - --reserve-memory=0M
             - --overprovisioned
             - --node-id=0
-            - --check=false
             - --kafka-addr=internal://0.0.0.0:9092
             - --advertise-kafka-addr=internal://sovereign-watch-redpanda:9092
             - --pandaproxy-addr=internal://0.0.0.0:8082
